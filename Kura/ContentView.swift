@@ -4,53 +4,89 @@
 //
 //  Created by Shania Brown on 6/24/25.
 //
-
 import SwiftUI
 import RealityKit
 import RealityKitContent
 
 struct ContentView: View {
-    @State private var sceneReady = false
-    @State private var rockEntity: Entity?
-    
+    @State private var heldEntity: Entity?
+    @State private var realityContent: RealityViewContent? // Store content reference
+
     var body: some View {
         RealityView { content in
-            // 1. First do all synchronous setup
-            let floor = ModelEntity(
-                mesh: .generatePlane(width: 1.5, depth: 1.5),
-                materials: [SimpleMaterial(color: .systemGray6, isMetallic: false)]
-            )
-            content.add(floor)
-            
-            // 2. Then load async assets
-            Task {
-                await loadRockAsset()
-                sceneReady = true
+            self.realityContent = content //  Save RealityKit scene reference
+            await setupScene(content: content)
+        }
+        .gesture(
+            TapGesture()
+                .targetedToAnyEntity()
+                .onEnded { value in
+                    let entity = value.entity
+                    print("👁️ Tapped: \(entity.name)")
+
+                    // Remove previously held object
+                    heldEntity?.removeFromParent()
+
+                    // Create head anchor and reparent entity
+                    let headAnchor = AnchorEntity(.head)
+                    entity.setPosition(SIMD3<Float>(0, 0, -0.3), relativeTo: nil) // Place slightly in front of face
+                    headAnchor.addChild(entity)
+
+                    //  Add anchor to saved content scene
+                    realityContent?.add(headAnchor)
+
+                    // Track the new held entity
+                    heldEntity = entity
+                }
+        )
+    }
+
+    func setupScene(content: RealityViewContent) async {
+        // Add floor
+        let floor = ModelEntity(
+            mesh: .generatePlane(width: 1.5, depth: 1.5),
+            materials: [SimpleMaterial(color: .brown, isMetallic: false)]
+        )
+        floor.position = SIMD3<Float>(0, 0, 0)
+        content.add(floor)
+
+        do {
+            let (rock, rake, lantern) = try await loadEntities()
+
+            let objects = [
+                (rock, SIMD3<Float>(-0.3, 0.05, 0)),
+                (rake, SIMD3<Float>( 0.3, 0.05, 0)),
+                (lantern, SIMD3<Float>(0.0, 0.05, 0))
+            ]
+
+            for (entity, position) in objects {
+                entity.scale = SIMD3<Float>(0.001, 0.001, 0.001)
+                entity.position = position
+                entity.name = entity.name.isEmpty ? "object" : entity.name
+                entity.generateCollisionShapes(recursive: true)
+                entity.components.set(InputTargetComponent(allowedInputTypes: .all))
+                content.add(entity)
             }
-        } update: { content in
-            // 3. Add async-loaded entities when ready
-            if sceneReady, let rock = rockEntity, !content.entities.contains(rock) {
-                content.add(rock)
-            }
+
+        } catch {
+            print("❌ Failed to load models: \(error)")
         }
     }
-    
-    @MainActor
-    private func loadRockAsset() async {
-        do {
-            let rock = try await Entity(named: "Zen_Rocks.usdz")
-            rock.scale = [0.01, 0.01, 0.01]
-            rock.position = [0, 0.05, 0]
-            rockEntity = rock
-        } catch {
-            print("Failed to load rock:", error)
-            // Create fallback entity
-            let fallback = ModelEntity(
-                mesh: .generateSphere(radius: 0.05),
-                materials: [SimpleMaterial(color: .gray, isMetallic: false)]
+
+    func loadEntities() async throws -> (Entity, Entity, Entity) {
+        if let bundleURL = Bundle.main.url(forResource: "RealityKitContent", withExtension: "bundle"),
+           let contentBundle = Bundle(url: bundleURL) {
+            return (
+                try await Entity(named: "Zen_Rocks", in: contentBundle),
+                try await Entity(named: "Zen_Rake", in: contentBundle),
+                try await Entity(named: "Zen_Lantern", in: contentBundle)
             )
-            fallback.position = [0, 0.05, 0]
-            rockEntity = fallback
+        } else {
+            return (
+                try await Entity(named: "Zen_Rocks", in: .main),
+                try await Entity(named: "Zen_Rake", in: .main),
+                try await Entity(named: "Japanese_Lantern_Tōrō", in: .main)
+            )
         }
     }
 }
