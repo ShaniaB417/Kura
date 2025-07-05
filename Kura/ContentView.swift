@@ -10,11 +10,11 @@ import RealityKitContent
 
 struct ContentView: View {
     @State private var heldEntity: Entity?
-    @State private var realityContent: RealityViewContent? // Store content reference
+    @State private var realityContent: RealityViewContent?
 
     var body: some View {
         RealityView { content in
-            self.realityContent = content //  Save RealityKit scene reference
+            self.realityContent = content
             await setupScene(content: content)
         }
         .gesture(
@@ -24,34 +24,25 @@ struct ContentView: View {
                     let entity = value.entity
                     print("👁️ Tapped: \(entity.name)")
 
-                    // Remove previously held object
                     heldEntity?.removeFromParent()
 
-                    // Create head anchor and reparent entity
                     let headAnchor = AnchorEntity(.head)
-                    entity.setPosition(SIMD3<Float>(0, 0, -0.3), relativeTo: nil) // Place slightly in front of face
+                    entity.setPosition(SIMD3<Float>(0, 0, -0.3), relativeTo: nil)
                     headAnchor.addChild(entity)
-
-                    //  Add anchor to saved content scene
                     realityContent?.add(headAnchor)
 
-                    // Track the new held entity
                     heldEntity = entity
                 }
         )
     }
 
     func setupScene(content: RealityViewContent) async {
-        // Add floor
-        let floor = ModelEntity(
-            mesh: .generatePlane(width: 1.5, depth: 1.5),
-            materials: [SimpleMaterial(color: .brown, isMetallic: false)]
-        )
-        floor.position = SIMD3<Float>(0, 0, 0)
-        content.add(floor)
-
         do {
-            let (rock, rake, lantern) = try await loadEntities()
+            let (floor, rock, rake, lantern) = try await loadAllEntities()
+
+            floor.scale = SIMD3<Float>(0.08, 0.08, 0.08)
+            floor.position = SIMD3<Float>(0, 0, 0)
+            content.add(floor)
 
             let objects = [
                 (rock, SIMD3<Float>(-0.3, 0.05, 0)),
@@ -73,16 +64,18 @@ struct ContentView: View {
         }
     }
 
-    func loadEntities() async throws -> (Entity, Entity, Entity) {
+    func loadAllEntities() async throws -> (Entity, Entity, Entity, Entity) {
         if let bundleURL = Bundle.main.url(forResource: "RealityKitContent", withExtension: "bundle"),
            let contentBundle = Bundle(url: bundleURL) {
             return (
+                try await Entity(named: "zengarden", in: contentBundle),
                 try await Entity(named: "Zen_Rocks", in: contentBundle),
                 try await Entity(named: "Zen_Rake", in: contentBundle),
                 try await Entity(named: "Zen_Lantern", in: contentBundle)
             )
         } else {
             return (
+                try await Entity(named: "zengarden", in: .main),
                 try await Entity(named: "Zen_Rocks", in: .main),
                 try await Entity(named: "Zen_Rake", in: .main),
                 try await Entity(named: "Japanese_Lantern_Tōrō", in: .main)
