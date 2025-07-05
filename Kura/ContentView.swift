@@ -40,7 +40,7 @@ struct ContentView: View {
         do {
             let (floor, rock, rake, lantern) = try await loadAllEntities()
 
-            floor.scale = SIMD3<Float>(0.08, 0.08, 0.08)
+            floor.scale = SIMD3<Float>(0.09, 0.09, 0.09)
             floor.position = SIMD3<Float>(0, 0, 0)
             content.add(floor)
 
